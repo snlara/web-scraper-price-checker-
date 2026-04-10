@@ -1,57 +1,74 @@
+import sys
 
-from bs4 import BeautifulSoup
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+# 1. IMMEDIATE CHECK: Print something to prove the script started
+print("--- SCRIPT STARTED ---")
 
-# 1. Scraping the Data
+try:
+    from seleniumbase import SB
+    from bs4 import BeautifulSoup
+    import time
+    import random
+    print("Libraries loaded successfully.")
+except ImportError as e:
+    print(f"FAILED TO LOAD LIBRARIES: {e}")
+    sys.exit()
+
+# CONFIGURATION
+SENDER_EMAIL = "your_email@gmail.com"
+APP_PASSWORD = "your_google_app_password" 
+RECEIVER_EMAIL = "snlara@gmail.com"
+URL = "https://www.apmex.com/category/25260/1-oz-silver-rounds"
+
 def get_apmex_prices():
-    url = "https://www.apmex.com/category/25260/1-oz-silver-rounds"
-    # User-Agent header is necessary to avoid being blocked as a bot
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
-    
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    # Locate product items (based on current APMEX structure)
-    products = soup.find_all('div', class_='product-container', limit=5)
-    
-    price_list = []
-    for product in products:
-        name = product.find('div', class_='item-title').text.strip()
-        price = product.find('span', class_='price').text.strip()
-        price_list.append(f"{name}: {price}")
+    print(f"Attempting to open: {URL}")
+    # Setting headless=False so you can see if a browser window actually opens
+    with SB(uc=True, headless=False) as sb:
+        print("Browser window opened. Loading page...")
+        sb.open(URL)
         
-    return "\n".join(price_list)
+        print("Waiting 5 seconds for Cloudflare/Content to load...")
+        time.sleep(5)
+        
+        # Check if we got blocked
+        if "Access Denied" in sb.get_page_title():
+            print("BLOCKED: APMEX detected the bot. Try running again.")
+            return None
 
-# 2. Sending the Email
-def send_email(content):
-    sender_email = "your_email@gmail.com"  # Your email
-    receiver_email = "snlara@gmail.com"
-    password = "your_app_password"         # Use a Google App Password, NOT your regular password
+        print("Parsing page content...")
+        soup = BeautifulSoup(sb.get_page_source(), 'html.parser')
+        
+        # Search for price elements
+        prices = soup.select('span.price')
+        names = soup.select('.item-title')
+        
+        if not prices:
+            print("No prices found on the page. Saving screenshot for review.")
+            sb.save_screenshot("check_this.png")
+            return None
 
-    message = MIMEMultipart()
-    message["From"] = sender_email
-    message["To"] = receiver_email
-    message["Subject"] = "APMEX 1 oz Silver Prices - Top 5"
-    
-    message.attach(MIMEText(content, "plain"))
+        results = []
+        for i in range(min(5, len(prices))):
+            name = names[i].get_text(strip=True) if i < len(names) else "Unknown Item"
+            price = prices[i].get_text(strip=True)
+            results.append(f"{name}: {price}")
+            
+        return "\n".join(results)
 
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(sender_email, password)
-            server.sendmail(sender_email, receiver_email, message.as_string())
-        print("Email sent successfully!")
-    except Exception as e:
-        print(f"Error: {e}")
-
-# Run the process
+# --- THE "ACTUALLY RUN IT" PART ---
 if __name__ == "__main__":
-    prices = get_apmex_prices()
-    if prices:
-        print("Prices found:\n", prices)
-        send_email(prices)
-    else:
-        print("No prices found. Check the website's HTML structure.")
+    print("Entering Main block...")
+    try:
+        prices_output = get_apmex_prices()
+        
+        if prices_output:
+            print("\nSUCCESS! FOUND PRICES:")
+            print(prices_output)
+            # You can uncomment the line below once the prints work
+            # send_email(prices_output)
+        else:
+            print("\nFinished, but no prices were extracted.")
+            
+    except Exception as e:
+        print(f"\nAN ERROR OCCURRED DURING EXECUTION: {e}")
+
+print("--- SCRIPT FINISHED ---")
