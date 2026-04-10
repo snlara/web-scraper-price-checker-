@@ -14,9 +14,7 @@ except ImportError as e:
     sys.exit()
 
 # CONFIGURATION
-SENDER_EMAIL = "your_email@gmail.com"
-APP_PASSWORD = "your_google_app_password" 
-RECEIVER_EMAIL = "snlara@gmail.com"
+
 URL = "https://www.apmex.com/category/25260/1-oz-silver-rounds"
 
 def get_apmex_prices():
